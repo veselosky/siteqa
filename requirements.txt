@@ -1,3 +1,7 @@
+aiodns
+aiohttp
+BeautifulSoup4
+cchardet
 colorama
 colorlog
 docopt
