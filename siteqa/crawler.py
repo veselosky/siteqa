@@ -19,7 +19,10 @@ import logging
 from urllib.parse import urljoin, urlparse, urlunparse, urldefrag
 
 import requests
+import requests.exceptions
 from bs4 import BeautifulSoup
+
+import siteqa.__about__ as about
 
 
 class Crawler(object):
@@ -40,7 +43,11 @@ class Crawler(object):
         start = urlparse(self.starturl, scheme='http')
         self.base = urlunparse((start[0], start[1], '', '', '', ''))
 
+        agent = "%s %s (%s)" % (about.__name__, about.__version__,
+                                about.__url__)
+        self.agent = kwargs.get("agent", agent)
         self.logger = kwargs.get("logger", logging.getLogger(__name__))
+        self.headers = {"User-Agent": self.agent}
 
     def can_parse_type(self, content_type):
         "Return true if we know how to extract links from this content type"
@@ -78,12 +85,19 @@ class Crawler(object):
         return links
 
     def head(self, url):
-        return self.session.head(url,
+        resp = self.session.head(url,
                                  timeout=self.timeout,
-                                 allow_redirects=True)
+                                 allow_redirects=True,
+                                 headers=self.headers)
+        if resp.status_code == 405:  # Method Not Allowed
+            resp = self.get(url)
+        return resp
 
     def get(self, url):
-        return self.session.get(url, timeout=self.timeout, allow_redirects=True)
+        return self.session.get(url,
+                                timeout=self.timeout,
+                                allow_redirects=True,
+                                headers=self.headers)
 
     def add_to_queue(self, item):
         self.queue.append(item)
@@ -102,15 +116,15 @@ class Crawler(object):
         if response.status_code < 300 and not response.history:
             return response
         elif 400 <= response.status_code < 500:
-            self.errors[source].append(url)
+            self.errors[source].append(response.url)
             return None
         elif response.status_code >= 500:
-            self.server_errors[source].append(url)
+            self.server_errors[source].append(response.url)
             return None
 
         if response.history:  # redirected
             if response.history[0].status_code == 301:
-                self.redirects[source].append((url, response.url))
+                self.redirects[source].append([url, response.url])
             return response
 
     def crawlpage(self, url):
@@ -132,7 +146,10 @@ class Crawler(object):
                 if not self.seen[url]:
                     self.logger.debug(url)
                     self.seen[url] = True
-                    resp = self.head(url)
+                    try:
+                        resp = self.head(url)
+                    except requests.exceptions.ConnectionError:
+                        self.logger.error("Connection Error: " + url)
                     self.check(resp, url, source)
                     if self.is_crawlable(resp):
                         self.crawlpage(url)

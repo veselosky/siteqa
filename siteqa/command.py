@@ -68,4 +68,29 @@ def main():
     logger = getLogger(cfg)
     crawler = Crawler(cfg["URL"], logger=logger)
     crawler.crawl()
-    print(repr(crawler.errors))
+    print("Errors found: ")
+    if not crawler.errors:
+        print("None")
+    else:
+        for key in crawler.errors:
+            print(key)
+            for value in crawler.errors[key]:
+                print("    " + value)
+
+    print("\nRedirects found (may want to update): ")
+    if not crawler.redirects:
+        print("None")
+    else:
+        for key in crawler.redirects:
+            print(key)
+            for value in crawler.redirects[key]:
+                print("  Old:" + value[0] + " | New: " + value[1])
+
+    print("\nServer Errors returned: ")
+    if not crawler.server_errors:
+        print("None")
+    else:
+        for key in crawler.server_errors:
+            print(key)
+            for value in crawler.server_errors[key]:
+                print("    " + value)
