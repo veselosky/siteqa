@@ -65,23 +65,23 @@ class Crawler(object):
         return resp.ok and self.is_local(resp.url) and \
             self.can_parse_type(resp.headers.get("content-type", ''))
 
-    def normalize(self, url):
-        "Normalize a (possibly partial) URL, returning tuple of (url, fragment)"
-        fixedurl = urljoin(self.starturl, url)
-        return urldefrag(fixedurl)
-
     def parse_html(self, html):
         return BeautifulSoup(html)
 
-    def extract_links(self, text):
+    def extract_links(self, resp):
         "Return list of URLs referenced by the document"
-        doc = self.parse_html(text)
+        doc = self.parse_html(resp.text)
         links = []
         for item in doc.find_all(href=True):
-            link, fragment = self.normalize(item["href"])
+            link, fragment = urldefrag(urljoin(resp.url, item["href"]))
             if not self.seen[link]:
                 links.append(link)
-        # TODO Also check src and srcset attrs, any others?
+        for item in doc.find_all(src=True):
+            link, fragment = urldefrag(urljoin(resp.url, item["src"]))
+            if not self.seen[link]:
+                links.append(link)
+
+        # TODO Also check srcset attrs, any others?
         return links
 
     def head(self, url):
@@ -130,8 +130,7 @@ class Crawler(object):
     def crawlpage(self, url):
         response = self.get(url)
         response.raise_for_status()
-        text = response.text
-        for link in self.extract_links(text):
+        for link in self.extract_links(response):
             if not self.seen[link]:
                 self.add_to_queue((url, link))
 
